@@ -16,32 +16,6 @@
 
 package com.eviware.soapui.impl.wsdl.support.wss.entries;
 
-import java.awt.event.ItemEvent;
-import java.awt.event.ItemListener;
-import java.io.StringWriter;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Vector;
-
-import javax.swing.*;
-import javax.xml.transform.Transformer;
-import javax.xml.transform.TransformerException;
-import javax.xml.transform.TransformerFactory;
-import javax.xml.transform.dom.DOMResult;
-import javax.xml.transform.dom.DOMSource;
-
-import org.apache.ws.security.WSConstants;
-import org.apache.ws.security.WSEncryptionPart;
-import org.apache.ws.security.WSSecurityException;
-import org.apache.ws.security.message.DOMCallbackLookup;
-import org.apache.ws.security.message.WSSecHeader;
-import org.apache.ws.security.message.WSSecSignature;
-import org.apache.xml.security.algorithms.MessageDigestAlgorithm;
-import org.apache.xml.security.signature.XMLSignature;
-import org.w3c.dom.Document;
-import org.w3c.dom.Element;
-
 import com.eviware.soapui.SoapUI;
 import com.eviware.soapui.config.WSSEntryConfig;
 import com.eviware.soapui.impl.wsdl.support.wss.OutgoingWss;
@@ -57,6 +31,33 @@ import com.eviware.soapui.support.xml.XmlObjectConfigurationBuilder;
 import com.eviware.soapui.support.xml.XmlObjectConfigurationReader;
 import com.eviware.soapui.support.xml.XmlUtils;
 import com.jgoodies.binding.PresentationModel;
+import org.apache.ws.security.WSConstants;
+import org.apache.ws.security.WSEncryptionPart;
+import org.apache.ws.security.WSSecurityException;
+import org.apache.ws.security.message.DOMCallbackLookup;
+import org.apache.ws.security.message.WSSecHeader;
+import org.apache.ws.security.message.WSSecSignature;
+import org.apache.xml.security.algorithms.MessageDigestAlgorithm;
+import org.apache.xml.security.signature.XMLSignature;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+
+import javax.swing.JComboBox;
+import javax.swing.JComponent;
+import javax.swing.JScrollPane;
+import javax.swing.JTextField;
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerException;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.dom.DOMResult;
+import javax.xml.transform.dom.DOMSource;
+import java.awt.event.ItemEvent;
+import java.awt.event.ItemListener;
+import java.io.StringWriter;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Vector;
 
 public class SignatureEntry extends WssEntryBase {
     private static final String DEFAULT_OPTION = "<default>";
@@ -65,6 +66,7 @@ public class SignatureEntry extends WssEntryBase {
     private int keyIdentifierType = 0;
     private String signatureAlgorithm;
     private boolean useSingleCert;
+    private boolean bspCompliant;
     private String signatureCanonicalization;
     private String digestAlgorithm;
     private String customTokenValueType;
@@ -105,10 +107,10 @@ public class SignatureEntry extends WssEntryBase {
                 "Sets which key identifier to use");
         keyIdentifierTypeComboBox.setRenderer(new KeyIdentifierTypeRenderer());
         keyIdentifierTypeComboBox.addItemListener(new ItemListener() {
-            	@Override
-            	public void itemStateChanged(ItemEvent e) {
-                    initCustomTokenState();
-                }
+            @Override
+            public void itemStateChanged(ItemEvent e) {
+                initCustomTokenState();
+            }
         });
         form.appendComboBox("signatureAlgorithm", "Signature Algorithm", new String[]{DEFAULT_OPTION, WSConstants.RSA,
                 WSConstants.DSA, XMLSignature.ALGO_ID_MAC_HMAC_SHA1, XMLSignature.ALGO_ID_MAC_HMAC_SHA256,
@@ -123,12 +125,13 @@ public class SignatureEntry extends WssEntryBase {
                 WSConstants.C14N_EXCL_WITH_COMMENTS}, "Set the canonicalization method to use.");
 
         form.appendComboBox("digestAlgorithm", "Digest Algorithm", new String[]{DEFAULT_OPTION,
-                MessageDigestAlgorithm.ALGO_ID_DIGEST_NOT_RECOMMENDED_MD5, MessageDigestAlgorithm.ALGO_ID_DIGEST_SHA1,
-                MessageDigestAlgorithm.ALGO_ID_DIGEST_SHA256, MessageDigestAlgorithm.ALGO_ID_DIGEST_SHA384,
-                MessageDigestAlgorithm.ALGO_ID_DIGEST_SHA512, MessageDigestAlgorithm.ALGO_ID_DIGEST_RIPEMD160},
+                        MessageDigestAlgorithm.ALGO_ID_DIGEST_NOT_RECOMMENDED_MD5, MessageDigestAlgorithm.ALGO_ID_DIGEST_SHA1,
+                        MessageDigestAlgorithm.ALGO_ID_DIGEST_SHA256, MessageDigestAlgorithm.ALGO_ID_DIGEST_SHA384,
+                        MessageDigestAlgorithm.ALGO_ID_DIGEST_SHA512, MessageDigestAlgorithm.ALGO_ID_DIGEST_RIPEMD160},
                 "Set the digest algorithm to use");
 
         form.appendCheckBox("useSingleCert", "Use Single Certificate", "Use single certificate for signing");
+        form.appendCheckBox("bspCompliant", "BSP Compliant", "Enable Basic Security Profile compliancy");
 
         customTokenIdField = form.appendTextField("customTokenId", "Custom Key Identifier", "Use a custom key identifier for signing");
         customTokenValueTypeField = form.appendTextField("customTokenValueType", "Custom Key Identifier ValueType", "Specify the custom key identifier value type");
@@ -159,10 +162,10 @@ public class SignatureEntry extends WssEntryBase {
         signatureAlgorithm = reader.readString("signatureAlgorithm", null);
         signatureCanonicalization = reader.readString("signatureCanonicalization", null);
         useSingleCert = reader.readBoolean("useSingleCert", false);
-
+        bspCompliant = reader.readBoolean("bspCompliant", true);
         digestAlgorithm = reader.readString("digestAlgorithm", null);
 
-        customTokenValueType = reader.readString( "customTokenValueType", null );
+        customTokenValueType = reader.readString("customTokenValueType", null);
         customTokenId = reader.readString("customTokenId", null);
 
         parts = readTableValues(reader, "signaturePart");
@@ -175,11 +178,12 @@ public class SignatureEntry extends WssEntryBase {
         builder.add("signatureAlgorithm", signatureAlgorithm);
         builder.add("signatureCanonicalization", signatureCanonicalization);
         builder.add("useSingleCert", useSingleCert);
+        builder.add("bspCompliant", bspCompliant);
 
         builder.add("digestAlgorithm", digestAlgorithm);
 
-        builder.add( "customTokenValueType", customTokenValueType );
-        builder.add( "customTokenId", customTokenId );
+        builder.add("customTokenValueType", customTokenValueType);
+        builder.add("customTokenId", customTokenId);
 
         saveTableValues(builder, parts, "signaturePart");
     }
@@ -217,11 +221,11 @@ public class SignatureEntry extends WssEntryBase {
             }
 
             if (keyIdentifierType == WSConstants.CUSTOM_KEY_IDENTIFIER) {
-                if(StringUtils.hasContent( customTokenId )) {
+                if (StringUtils.hasContent(customTokenId)) {
                     wssSign.setCustomTokenId(context.expand(customTokenId));
                 }
 
-                if(StringUtils.hasContent(customTokenValueType )) {
+                if (StringUtils.hasContent(customTokenValueType)) {
                     wssSign.setCustomTokenValueType(context.expand(customTokenValueType));
                 }
             }
@@ -230,6 +234,7 @@ public class SignatureEntry extends WssEntryBase {
             if (!wsParts.isEmpty()) {
                 wssSign.setParts(wsParts);
             }
+            wssSign.getWsConfig().setWsiBSPCompliant(bspCompliant);
 
             writer = new StringWriter();
             XmlUtils.serialize(doc, writer);
@@ -337,6 +342,14 @@ public class SignatureEntry extends WssEntryBase {
     public void setCustomTokenValueType(String customTokenValueType) {
         this.customTokenValueType = customTokenValueType;
         saveConfig();
+    }
+
+    public boolean isBspCompliant() {
+        return bspCompliant;
+    }
+
+    public void setBspCompliant(boolean bspCompliant) {
+        this.bspCompliant = bspCompliant;
     }
 
     public void setParts(List<StringToStringMap> parts) {
